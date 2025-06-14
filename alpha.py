@@ -100,6 +100,7 @@ class Gr8Script0658c52b281847fba905540262d3be47(Strategy):
             if (self.entry
                 and self.count > 70
                 and (md.L1.minute_open - md.L1.ask)/md.stat.atr > 0.1
+                and md.L1.rvol > 1.2
                 and self.news == 0):
                 self.entry = False
 
@@ -133,6 +134,7 @@ class Gr8Script0658c52b281847fba905540262d3be47(Strategy):
             if (self.entry
                 and self.count3 > 70
                 and (md.L1.minute_open - md.L1.bid)/md.stat.atr < -0.2
+                and md.L1.rvol > 1.2
                 and self.news == 0):
                 self.entry = False
 

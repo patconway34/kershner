@@ -77,9 +77,10 @@ class Gr8Script9c2a8cabec81482c9e93a089f03c811e(Strategy):
                 and (md.L1.minute_open/md.L1.bid - 1) >= .04
                 and md.L1.minute_open - md.L1.bid > .08
                 and md.L1.ask - md.L1.bid < .03
+                and md.L1.rvol > 0.8
                 and  .3 <= md.L1.bid <= 5
                 and md.L1.bid <= md.stat.prev_close
-                and account[self.symbol].position.shares == 0 
+                and account[self.symbol].position.shares == 0
                 and account[self.symbol].pending.shares_long == 0
                 and account[self.symbol].pending.shares_short == 0):
                 self.entry = False          
