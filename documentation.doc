@@ -1,0 +1,529 @@
+
+Kore Basics
+Kore's backtester is an EVENT DRIVEN system.
+Unlike a typical computer program, your code does not run from start to finish, instead it will receive callbacks from a master control system every time a specific event occurs.
+You place your code in that event callback and make decisions based on that event and the data it passes in to you.
+Some of these events are exclusive to Kore Full users. You can decide to disable events which you do not use (this can help to speed up your code).
+When your script is run, a unique version is instantiated for each symbol in our overall universe (as of early 2018 this is exclusively US Equities, over 8800 symbols).
+One of the first callbacks is is_symbol_qualified, it is called once for every symbol in this overall universe.
+If you return a True from is_symbol_qualified then the script will continue to run, if you return a False then it will be terminated for this current symbol.
+Place your universe selection criteria into is_symbol_qualified. The smaller your universe of symbols, the faster your tests will run.
+Don't use md.L1. data in is_symbol_qualified, Level 1 data is only available once the script starts.
+You can use md.stat. data (static fundamental) data, such as md.stat.prev_close, md.stat.atr, md.stat.avol etc. See APIs > Kore > Market - md > stat
+You can also use lists in is_symbol_qualified to limit your universe. See the documentation under Reference > Lists
+Kore quick Index
+Kore Language	Short Description
+Symbol	Varies depending on which Callback you are in
+symbol #	use this in @classmethod callbacks ie is_symbol_qualified and backtesting_extra_symbols
+self.symbol #	use this in instance method (aka SYMBOL method) callbacks, ie everywhere else
+md.symbol #	
+Event Callbacks	SYMBOL level Callbacks from the master system
+def on_start(self, md, order, service, account): #	called at the beginning of each instance
+def on_finish(self, md, order, service, account): #	called when an instance is terminated
+def on_timer(self, event, md, order, service, account): #	Called when a timer event is received
+def on_minute_bar(self, event, md, order, service, account, bar): #	Callback every time a new minute bar is created for the symbol. Effectively it is called every minute before on_trade is called, or (if there has been no trading) 5 seconds after a new minute starts
+def __init__(self): #	initialization callback, use as def init(self, **params) if you wish to pass in external parameters, pass them in as a dictionary ie {"shares":100,"maxatr":2.5,"minrvol":2.0}
+def on_trade(self, event, md, order, service, account): #	Called when time and sales message is received
+def on_nbbo_price( self, event, md, order, service, account ): #	Called when national best bid offer (nbbo) prices change (not size)
+def on_news(self, event, md, order, service, account): #	News callback, see also market data md.news section below
+def on_trading_halt(self, event, md, order, service, account): #	Callback whenever there is a halt, data from 2018-06-13
+def on_arca_imbalance(self, event, md, order, service, account): #	Called when arca imbalance message is received (Open,Close,IPO,Halt)
+def on_amer_imbalance(self, event, md, order, service, account): #	Called when an American imbalance message is received (Open,Close,IPO,Halt)
+def on_bzx_imbalance(self, event, md, order, service, account): #	Called when a bats imbalance message is received
+def on_nasdaq_imbalance(self, event, md, order, service, account): #	Called when nasdaq imbalance message is received (Open,Close,IPO,Halt)
+def on_nyse_imbalance(self, event, md, order, service, account): #	Called when nyse/amex/nsye mkt/openbook message is received (Open,Close,IPO,Halt)
+Order Handling Event Callbacks	SYMBOL level Order Handling Callbacks from the master system
+def on_ack(self, event, md, order, service, account): #	Called when order considered pending by the system
+def on_reject(self, event, md, order, service, account): #	Called when an order is rejected (locally or other parts of the order processes e.g. the market)
+def on_fill(self, event, md, order, service, account): #	Called when the position changes in this account and symbol (whether manually or automated)
+def on_cancel(self, event, md, order, service, account): #	Called when the market has confirmed an order has been canceled
+def on_cancel_reject(self, event, md, order, service, account): #	Called whenever an order cancellation is rejected for any reason. A cancellation may be rejected if the order has already been filled, or if the exchange does not allow the cancellation.
+@classmethod Event Callbacks	CLASS level Callbacks from the master system
+def on_strategy_start(cls, md, service, account): #	Should be preceded by @classmethod - Called when the strategy starts (aka before anything else)
+def on_strategy_finish(cls, md, service, account): #	Should be preceded by @classmethod - Called when the strategy finishes (aka after everything else has stopped)
+def is_symbol_qualified(cls, symbol, md, service, account): #	Should be preceded by @classmethod - Called once for every symbol in our system, return a true if you want that symbol to run in the model
+def backtesting_extra_symbols(cls, symbol, md, service, account): #	Should be preceded by @classmethod - Used to load other symbols data not in is_symbol_qualified(). Only used in backtesting
+Time	Time Functions!** 86400000000µs in a day, 3600000000µs in an hour, 60000000µs in a minute
+service.time(hours, minutes, seconds, milliseconds) #	Create an Absolute Time used to compare with Timestamps, convert a human time to system time, you can submit service.time(15) or service.time(15,20) etc
+service.time_interval(hours, minutes, seconds, milliseconds) #	Convert to milliseconds for time math. Convert to hours mins secs millisecs into 1 millisec number to use for time math ie current time plus an hour... eg service.time_interval(0,0,1,1) 1 second and 1 millisecond will return the integer 1001000
+service.time_to_string(muts,format="%Y-%m-%d %H:%M:%S.%f") #	Converts the internal machine integer value for time into Human readable DateTime ie event.timestamp or md.L1.timestamp into a string
+service.time_to_string(md.L1.timestamp, '%Y-%m-%d')#	gets the value from md.L1.timestamp and strips out the date
+service.time_to_string(event.timestamp)[-15:-3]#	gets the human readable date time from the event.timestamp (can be any timestamp) and pulls out the time
+service.system_time #	Returns the machine integer value for system time, the time in the backtest system, not the event time or the time of the market data which can be different
+service.get_market_hours(date_offset=-1) #	returns a tuple like (1455633000000000, 1455656400000000) so service.get_market_hours(date_offset=-2)[0] will give you the machine int for 2 trading days ago (First number is open datetime, second number is close datetime)
+md.market_close_time #	Try to use this rather than hard coding 16:00 as some trading days end earlier (ie 13:00 on half day trading)
+md.market_open_time #	As we increase the markets we trade in the market open time may vary, better to use this than hard coding the time.
+md.market_close_time - service.time_interval(minutes=30) #	30 minutes before the close
+md.market_open_time + service.time_interval(hour=1) #	1 hour after the open
+Market Data	md. commands are used to access Market Data, by default this is the current symbol but you can access other symbols, see below
+md.L1.last	Last price for the current symbol
+md['SPY'].L1.last	Last price for SPY (or any other symbol you specify) regardless of which symbol has been called
+Market Data - STATIC	Unchanging Market Data - for most of these you can use TA-LIB to create alternate timeframes
+md.stat.atr #	ATR - Average True Range (aka Average Trading Range), over 10 days based on an underlying 250 days of TR (True Range).
+md.stat.avol #	AVOL (21 day) - Average Volume over 21 days, or whatever smaller number of days is actually available.
+md.stat.beta #	Beta - Beta, computed over a 249 day time period (250 bars) by default, or as short as 20 days (21 bars) if more aren't available, or NaN if only fewer are available.
+md.stat.dividend_amount #	Dividend Amount - in dollars applied to the stock price
+md.stat.dividend_comment #	Dividend Comment - this may provide more details on the type of dividend.
+md.stat.dividend_percent #	Dividend Percent - ratio (dividend / prev_close)
+md.stat.exchange #	Primary Exchange N=NYSE, Q=Nasdaq, A=Amex, P=ARCA
+md.stat.lot_size #	Lot Size - Number of shares per lotfor this symbol (normally 100)
+md.stat.prev_close #	Previous Close - In backtesting this is the UNADJUSTED close price, for the adjusted close price use the bar data... md.bar.daily(start=-1).close[0] . In LIVE/FORWARD TESTING this variable is the ADJUSTED close, for the UNADJUSTED close in live you should use md.stat.unadjusted_prev_close
+md.stat.unadjusted_prev_close	Live and Forward Testing Only The unadjusted closing price from previous day
+md.stat.split_ratio #	Split Ratio - The ratio of the stock split that was applied to the price. Only available in Forward/Live not backtesting
+md.stat.prev_symbol #	The previous days symbol. If there was a symbol name change, you can see what it was prior. If the name is the same, then the prev_symbol will match the current.
+Market Data md.L1.	Level 1 Market Data
+L1 data is most useful (and sometimes ONLY available) in on_nbbo and on_trade which are Kore Full callbacks. If it is available in on_minute it will either be the latest value or, but if it is a 'minute' value it will probably be a 0 or nan having just been reset with the start of the new minute.
+md.L1.abs_net_change_percent_atr #	PC Net of ATR
+md.L1.acc_volume #	Accumulated Volume
+md.L1.agr_ask_size #	Sum of all ask participants in the SIP data. See md.L2 for live options
+md.L1.agr_bid_size #	Sum of all bid participants in the SIP data. See md.L2 for live options
+md.L1.ask #	Best Ask
+md.L1.ask_change #	Ask Change - Difference between previous and current ask. Positive for increase and negative for decrease. Originally simply the difference between the current and previous ask (i.e. 0 if no change) but now the difference between the current and previous different bid or ask (i.e. the value is carried forward and should never be zero)
+md.L1.ask_exchange #	Best Ask Exchange
+md.L1.ask_size #	Best Ask Size
+md.L1.bid #	Best Bid
+md.L1.bid_change #	Bid Change - Difference between previous and current bid. Positive for increase and negative for decrease. Originally simply the difference between the current and previous ask (i.e. 0 if no change) but now the difference between the current and previous different bid or ask (i.e. the value is carried forward and should never be zero)
+md.L1.bid_exchange #	Best Bid Exchange
+md.L1.bid_size #	Best Bid Size
+md.L1.change_from_open #	Change from Open
+md.L1.close #	Close Price - on day of trading, contains nan until close price is by the first print after at 16:00 regardless of the exchange
+md.L1.closing_trade #	Closing Trade Official End of Auction on Primary Exchange. The "6" print on the primary exchange - To locate the specific closing print at the time of the event, check for ("6" in md.L1.trade_condition and md.L1.exchange==md.stat.exchange) in on_trade.
+md.L1.closing_trade_timestamp #	Closing Time from the "6" print on the primary exchange. 0 until it is set.
+md.L1.closing_trade_volume #	Close Trade Volume from the "6" print on the primary exchange.
+md.L1.core_acc_volume #	Accumulated Volume During Market Hours
+md.L1.daily_askvol #	Daily Ask Volume
+md.L1.daily_bidvol #	Daily Bid Volume
+md.L1.daily_count #	Daily Count
+md.L1.daily_high #	Daily High
+md.L1.daily_high_timestamp #	Daily High Time
+md.L1.daily_low #	Daily Low
+md.L1.daily_low_timestamp #	Daily Low Time
+md.L1.daily_spread #	Daily Spread
+md.L1.daily_vwap #	Daily VWAP
+md.L1.exchange #	Last Trade Exchange
+md.L1.gap #	Open GAP
+md.L1.halt_reason #	Halt Reason - derived from quote data, only available in forward testing and live
+md.L1.halt_time #	Halt Time - derived from quote data, only available in forward testing and live
+md.L1.is_halted #	Is Halted - derived from quote data, only available in forward testing and live
+md.L1.last #	Last Trade
+md.L1.last_in_range #	LIR
+md.L1.last_size #	Last Trade Size
+md.L1.lower_limit_price_band #	Lower Limit Price Band (LULD)
+md.L1.minute_askvol #	Minute Ask Volume - for use in on_trade ie intra minute, if checked in on_minute will be 0
+md.L1.minute_bidvol #	Minute Bid Volume - for use in on_trade ie intra minute, if checked in on_minute will be 0
+md.L1.minute_close #	Minute Close - for use in on_trade ie intra minute, if checked in on_minute will be nan
+md.L1.minute_count #	Minute Count - for use in on_trade ie intra minute, if checked in on_minute will be 0
+md.L1.minute_high #	Minute High - for use in on_trade ie intra minute, if checked in on_minute will be nan
+md.L1.minute_low #	Minute Low - for use in on_trade ie intra minute, if checked in on_minute will be nan
+md.L1.minute_open #	Minute Open - for use in on_trade ie intra minute, if checked in on_minute will be nan
+md.L1.minute_spread #	Minute Spread - for use in on_trade ie intra minute, if checked in on_minute will be nan
+md.L1.minute_start_timestamp #	Timestamp of the start of the minute (not the first event in the minute) - update 2020/1/12
+md.L1.minute_volume #	Minute Volume - for use in on_trade ie intra minute, if checked in on_minute will be 0
+md.L1.minute_vwap #	Minute VWAP - for use in on_trade ie intra minute, if checked in on_minute will be nan
+md.L1.net_change #	PC Net Change
+md.L1.net_percent_change #	Percent Net Change
+md.L1.open #	Not necessarily the open price, it is the first print after 9:30am regarless of the exchange - on the day of trading, contains nan until open price is set
+md.L1.opening_trade #	Opening Trade Official End of Auction on Primary exchange - To locate the specific opening print at the time of the event, check for ("O" in md.L1.trade_condition and md.L1.exchange==md.stat.exchange) in on_trade.
+md.L1.opening_trade_timestamp #	Opening Timestamp from the "O" print (md.L1.trade_condition) on the primary exchange. 0 until it is set.
+md.L1.opening_trade_volume #	Opening Trade Volume from the "O" print (md.L1.trade_condition) on the primary exchange.
+md.L1.percent_change_from_open #	Percent Change from Open
+md.L1.primary_acc_volume #	Accumulated Volume Primary Exchange
+md.L1.rvol #	RVOL
+md.L1.sliding_gap #	prior to open = last-prev_close, after open is GAP (open-prev_close)
+md.L1.sliding_gap_percent #	Sliding GAP Percent - value above divided by prev_close to give a percentage sliding gap
+md.L1.ssr #	Short Stock Restriction Code (SSR) - No data in Backtesting
+md.L1.timestamp #	Timestamp
+md.L1.trade_condition #	Last Trade Condition - A List containing up to 4 conditions associated with the last trade. Treat this as a Python list - '6' in md.L1.trade_condition would be True if it was in the list, code... ("O" in md.L1.trade_condition and md.L1.exchange==md.stat.exchange) to identify the opening print on the primary exchange. Use ("6" in md.L1.trade_condition and md.L1.exchange=md.stat.exchange) to identify the closing print. See List
+md.L1.trade_direction #	Trade Direction
+md.L1.trade_position #	Last Trade Position
+md.L1.upper_limit_price_band #	Upper Limit Price Band (LULD)
+md.L2.get_best_asks_to_price(price) #	best asks to price - Live and Forward only
+md.L2.get_best_bids_to_price(price) #	best bids to price - Live and Forward only
+md.L2.get_exchange_best_ask(exchange) #	exchange best ask - Live and Forward only
+md.L2.get_exchange_best_bid(exchange) #	exchange best bid - Live and Forward only
+Bars	Access to historic Formed bar data Daily and Minute.
+For data from the forming bars (current incomplete "live" bar) see md.L1. above
+md.bars. Data Passed in	This is the data you pass to the bar calls
+start	An offset. Normally negative -10 = 10 days/minutes ago. Or a timestamp.
+end	An offset. Optional. Normally negative -8 = 8 days/minutes ago. Or a timestamp.
+include_empty	Returns bars for empty minutes, Empty bars contain NaN if no trades happened in bar (use .valid to check bar)
+include_extended	MINUTE ONLY Include pre/post minute bars
+bar_size	MINUTE ONLY Minute bar size. Based off 9:30 start time
+today_only	MINUTE EXTENDED ONLY Limits the bars returned to today only
+md.bars Data returned	This is the data returned by the bar call
+askvol	the volume of trades that occurred at the ask during timeframe
+avgdelta	Average change in price between trades during time period.
+bidvol	the volume of trades that occurred at the bid during timeframe
+bvwap	DAILY ONLY the vwap for the bar, see md.L1.minute_vwap for the vwap for the current minute
+bwap	LIVE MINUTE ONLY the vwap for the minute bar but is only available on the live trading system
+close	final, or closing price for the bar
+closing_trade	DAILY ONLY closing price for the symbol's primary exchange (6 print, MOC print)
+count	number of items contributing to the bar
+high	highest price for the bar
+length	time length for the bar (rolled bars - see bar_size above)
+low	lowest price for the bar
+open	first qualifying trade of the bar, so for daily bars this will be the first non odd-lot print after 9:30. Not necessarily the "Opening Print"/"O" print. See below.
+opening_trade	DAILY BARS ONLY Opening price for the symbol's primary exchange (ie the "O" print, the MOO print). if it is 0.0 then use the value in open (see above)
+spread	average difference between the ask and the bid for the bar
+symbol	symbol for the bar
+timestamp	timestamps for the beginning of each bar, use service.time_to_string(muts,format="%Y-%m-%d %H:%M:%S.%f") to pull the date/time
+valid	whether or not bar is valid
+volume	volume for the bar
+vwap	volume weighted average price(vwap) of the bar, for minute bars this is the vwap for the day up to this point
+md.bars Examples	Real world examples of bar fetch requests
+md.bar.daily(start=-10) #	Fetch the last 10 daily bars - This will always have a length of 16 because there are 16 different list contained in the returned list, an open list, a close list etc
+md.bar.daily(start=-10).open #	Fetch the last 10 daily bars open prices
+md.bar.daily(start=-10).close #	Fetch the last 10 daily bars close price
+md.bar.daily(start=-10).low #	Fetch the last 10 daily bars low prices
+md.bar.daily(start=-10).high #	Fetch the last 10 daily bars high prices
+md.bar.daily(start=-10).volume #	Fetch the last 10 daily bars volumes
+md.bar.load_daily_bars(days=730) #	Used in on_start to expand the number of daily bars from base of 1 year, use multiples of 365 (so 730 gets you 502/503 bars, 1095 gets you 755/756 bars). Caution, this WILL SLOW DOWN YOUR SCRIPT!
+md.bar.minute(start=-5) #	Fetch the last 5 minute bars - This will always have a length of 16 because there are 16 different list contained in the returned list, an open list, a close list etc
+md.bar.minute(start=-5).open #	Fetch the last 5 minute bars open prices
+md.bar.minute(start=-5).close #	Fetch the last 5 minute bars close price
+md.bar.minute(start=-5).low #	Fetch the last 5 minute bars low prices
+md.bar.minute(start=-5).high #	Fetch the last 5 minute bars high prices
+md.bar.minute(start=-5).volume #	Fetch the last 5 minute bars volumes
+md.bar.daily_by_index(-10) #	Will have up to 10 items no matter how many days it needs to go back
+md.bar.minute_by_index(-10) #	Will have up to 10 items no matter how many minutes it needs to go back (limited by the parameters of the method)
+service.time_to_string(md.bar.daily(start=-1).timestamp[0], '%Y-%m-%d') #	Gets the date of the bar for the most recent completed trading day
+md.bar.minute(start=-1, bar_size=15) #	Roll your own sized bars from the minute bars, caution on timing, best to do in on_minute_bar or on_timer
+md.bar.minute(start=-300, today_only=False,include_extended=False)	Get the last 300 bars, go back into yesterday but dont include pre/post
+md.bar.minute(start=-300, today_only=False,include_extended=True)	Get the last 300 minute bars, go back into yesterday, include pre and post
+md.bar.minute(start=-100, bar_size=15,include_extended=True)	Get the last 100 bars, use pre and post, roll into 15m bars
+md.bar.minute(start=-300, bar_size=10,today_only=False,include_extended=False)	Get the last 300 bars, do not use pre post but go back into yesterday if you need to, roll into 10 min bars
+md.bar.minute(start=-300, bar_size=5,today_only=False)	Get 300 minute bars, go back into yesterday, not pre or post, roll into 5m bars
+md.bar.minute(start=yestOpTime,end=yestClTime,today_only=False)	minute bars from yesterday, use yestOpTime,yestClTime = service.get_market_hours(-1) to get the open and close timestamps for the previous day
+News	News Headline data
+md.news.headline #	Headline
+md.news.hyperlink #	Hyperlink
+md.news.provider_name #	Provider Name
+md.news.source_instructions #	Source Instructions
+md.news.story_codes #	Story Codes
+md.news.symbols #	Symbols
+md.news.synopsis #	Synopsis
+md.news.timestamp #	TimeStamp
+md.news.wire_description #	Wire Description
+Service Functions	Input Output - Script input/output
+service.account_notify() #	
+service.alert() #	
+service.info() #	
+service.read_file() #	Read from a file in USER DATA, Advanced
+service.write_file() #	Writing to a File in USER DATA
+Script Control	Controlling scripts
+service.terminate() #	Terminate a symbol at the end of this pass
+service.hibernate() #	
+service.start_strategy() #	
+service.stop_strategy() #	
+Triggers	Managing System Methods/Callbacks
+service.add_event_trigger() #	Add a event trigger to the list of triggers. Should clear other event triggers first. It only works in on_start().
+service.add_time_trigger(timestamp,repeat_interval=None,timer_id=None) #	Add a time trigger that calls on_timer at the time you set with the id, repeat interval is integer time
+service.clear_event_triggers() #	Remove all event triggers from the list of triggers.
+service.clear_time_triggers() #	Remove all time triggers from the list of triggers.
+General Overview of Timer Functions
+Account Functions	Getting account, risk, position and PnL information Main Documentation
+account[self.symbol].position.entry_price #	Entry Price for specific symbol
+account[self.symbol].position.inventory #	Dictionary containing position information including ENTRY TIME!!
+account[self.symbol].position.mtm_price #	MTM Price for specific symbol
+account[self.symbol].position.shares #	Position Shares for specific symbol
+account.account_id #	Account Id
+account.buying_power #	Buying Power
+account.mtm_pl #	MTM P&L
+account.entry_pl #	Entry P&L
+account.open_capital_long #	Open Capital Long
+account.open_capital_short #	Open Capital Short
+account.open_symbols #	useful for multi-day, add this to your is_symbol_qual - 'or symbol in account.open_symbols'
+account.pending_capital_long #	Capital Long
+account.pending_capital_short #	Capital Short
+account.realized_entry_pl #	Realized Entry P&L
+account.realized_mtm_pl #	Realized MTM P&L
+account.unrealized_entry_pl #	Unrealized Entry P&L
+account.unrealized_mtm_pl #	Unrealized MTM P&L
+account.realized_entry_pl+account.unrealized_entry_pl	Total Entry PnL (calculated based on direction of trade and current bid/ask)
+account.realized_mtm_pl+account.unrealized_mtm_pl	Total MTM PnL (calculated based on direction of trade and current bid/ask)
+account[self.symbol].pending.capital_long #	Pending capital Long for specific symbol
+account[self.symbol].pending.capital_short #	Pending capital Short for specific symbol
+account[self.symbol].pending.count_long #	Count of pending long orders for specific symbol
+account[self.symbol].pending.count_short #	Count of pending short orders for specific symbol
+account[self.symbol].pending.shares_long #	Pending shares Long for specific symbol
+account[self.symbol].pending.shares_short #	Pending shares Short for specific symbol
+account[self.symbol].position.capital_long #	Capital Long for specific symbol
+account[self.symbol].position.capital_short #	Capital Short for specific symbol
+account[self.symbol].realized_pl.entry_pl #	Realized Entry P&L for specific symbol
+account[self.symbol].realized_pl.mtm_pl #	Realized MTM P&L for specific symbol
+account[self.symbol].unrealized_pl.entry_pl #	Unrealized Entry P&L for specific symbol (calculated based on direction of trade and current bid/ask)
+account[self.symbol].unrealized_pl.mtm_pl #	Unrealized MTM P&L for specific symbol(calculated based on direction of trade and current bid/ask)
+Profiling	Find out why your model is taking so long to run!
+service.enable_profiling()#	Enable the profiling process
+service.disable_profiling()#	Disable the profiling process
+Book Data	INTERNAL ONLY Depth of Book Data - ONLY IN AVAILABLE IN FORWARD TESTING AND LIVE - Very costly in CPU cycles to accumulate down the book!
+md.book.get_all_ask_shares_to_price(price) #	all ask shares to price
+md.book.get_all_bid_shares_to_price(price) #	all bid shares to price
+md.book.get_ask_shares_at_price(exchange, price) #	ask shares at price
+md.book.get_ask_shares_to_price(exchange, price) #	ask shares to price
+md.book.get_ask_vwap_to_price(exchange, price) #	ask vwap to price
+md.book.get_bid_shares_at_price(exchange, price) #	bid shares at price
+md.book.get_bid_shares_to_price(exchange, price) #	bid shares to price
+md.book.get_bid_vwap_to_price(exchange, price) #	bid vwap to price
+md.book.get_top_price_of_all_book_asks() #	top price of all book asks
+md.book.get_top_price_of_all_book_bids() #	top price of all book bids
+md.book.get_top_price_of_book_asks(exchange) #	top price of book asks
+md.book.get_top_price_of_book_bids(exchange) #	top price of book bids
+Simple Order Placement	To be used when developing a model, these order type cannot be used in a LIVE trading environment
+order.send(self.symbol, 'buy', 100, type='MKT') #	Simple Market Order, use 'buy' or 'sell', shares, type defaults to MKT
+order.send(self.symbol, 'buy', 100, type='LMT', price=1125) #	Simple Limit Order, price is your Limit price, for a Buy it is the highest price you are willing to pay
+order.send(self.symbol, 'sell', 100, type='LMT', price=1130) #	Simple Limit Order, price is your Limit price, for a Sell it is the lowest price you are willing sell for
+order.send(self.symbol, 'sell', 100, type='STP', stop=1125) #	Simple Stop Market Order, use 'buy' or 'sell', stop price is the price at which the market order will be triggered
+order.send(self.symbol, 'buy', 100, type='STL', stop=1130,price=1129.2) #	Simple Stop Limit Order, use 'buy' or 'sell', stop price is the price at which the Limit order will be triggered, price is the Limit price (as above)
+order.send(self.symbol, 'buy', 100, type='MOO') #	Simple Market On Open Order, use 'buy' or 'sell', time restrictions apply, see docs
+order.send(self.symbol, 'sell', 100, type='MOC') #	Simple Market On Close Order, use 'buy' or 'sell', time restrictions apply, see docs
+order.send(self.symbol, 'buy', 100, type='LOO', price=908.00) #	Simple Limit On Open Order, use 'buy' or 'sell', price is the target limit price
+order.send(self.symbol, 'sell', 100, type='LOC', price=908.00) #	Simple Limit On Close Order, use 'buy' or 'sell', price is the target limit price
+order.send(self.symbol, 'buy', 100, type='MIT', stop=1125) #	Simple Market If Price is Touched. Send a Buy Market order if the price comes down to the (stop) price specified.
+order.send(self.symbol, 'sell', 100, type='MIT', stop=1125) #	Simple Market If Price is Touched. Send a Sell Market order if the price comes up to the (stop) price specified.
+order.cancel(self.symbol, order_id=self.buy_handle) #	Simple Order Cancel, capture the handle when placing the order and use to cancel - see documentation
+Order Placement	You can use basic "limit" and "market" algos or more sophisticated algos, see below
+order.algo_buy(self.symbol, algorithm="market", intent="init",order_quantity=100,collect=self.data_collection) #	All orders must have an order_quantity except exits (intent='exit'). To collect data at the time of order use collect=, give it a dictionary and the data in the dictionary will be in your trades.csv file ie {'last': md.L1.last, 'bid': md.L1.bid, 'ask': md.L1.ask}. If you use the letters 'time' in a field name it will cause that field to be exported in TIME FORMAT!!!
+order.algo_buy(self.symbol, algorithm="limit", intent="init",price=md.L1.bid -0.15,order_quantity=100,collect=self.data_collection) #	A limit order must have a price
+order.algo_sell(self.symbol, algorithm="market", intent="exit",collect=self.data_collection) #	If it is an exit no need for quantity. collect= you can have a different dictionary for your exit!
+order.cancel(symbol, order_id, criteria, user_key)	Complex function - see documentation
+order.twap(self.symbol, 500, "buy", start_time=twap_start, end_time=twap_end, order_aggression=4)#	TWAP - Time Weighted Average Price Order - See Documentation
+order.twap_cancel(order_handle)#	Capture handle when placing order and use to cancel - See Documentation
+order.vwap(self.symbol, 5000, "buy", time_frame=10,order_aggression=3)#	VWAP - Volume Weighted Average Price Order - See Documentation
+order.vwap_cancel(order_handle)#	Capture handle when placing order and use to cancel - See Documentation
+Order Algos	A selection of order algos, for more options see Reference ... Order Algos
+"market"#	Simulation of basic market order
+"limit"#	Simulation of basic limit order, price must be passed, see above
+For VWAP#	Volume Weighted Average Price - has a unique order type, see above or documentation
+For TWAP#	Time Weighted Average Price - has a unique order type, see above or documentation
+NYSE_MKT_BUY = "96c01190-bbcc-40c2-b3c1-d645e3dff215"#	NYSE market order BUY
+NYSE_MKT_SELL = "a5a329d1-f81e-4d4b-99c3-dfff4053e09f"#	NYSE market order SELL
+NASD_MKT_BUY = "1f9b553d-30bf-40a3-8868-ebe70b5079b2"#	NASDAQ market order BUY
+NASD_MKT_SELL = "5fc61945-3498-47da-abf6-b5dabdc9f4ac"#	NASDAQ market order SELL
+ARCA_MKT_BUY = "2b4fdc55-ff01-416e-a5ea-e1f1d4524c7d"#	ARCA market order BUY
+ARCA_MKT_SELL = "8fdee8fe-b772-46bd-b411-5544f7a0d917"#	ARCA market order SELL
+BATS_MKT_BUY = "103d9b43-937a-4590-9f54-1476f3545cf1"#	BATS market order BUY
+BATS_MKT_SELL = "398a38ee-b614-4678-90a6-dbf40d2a54b9"#	BATS market order SELL
+NYSE_LMT_BUY = "dc5c926b-077d-4446-a765-a11032925ffc"#	NYSE limit order BUY
+NYSE_LMT_SELL = "8587f4f5-0301-4645-aa97-fc530eb9f0c2"#	NYSE limit order SELL
+NASD_LMT_BUY = "4ad20d14-aacb-4850-9efe-cfa92d154304"#	NASDAQ limit order BUY
+NASD_LMT_SELL = "09528d6b-7d4f-4cc2-8611-8bbecb33785c"#	NASDAQ limit order SELL
+ARCA_LMT_BUY = "97a91492-1033-4a96-a546-9bff6df73b08"#	ARCA limit order BUY
+ARCA_LMT_SELL = "c982d0cd-9be5-4a35-b89f-1f66b2495ec4"#	ARCA limit order SELL
+NYSE_MOO_BUY = "7933f7c8-2561-4665-a51d-f67df4eb9fac"#	NYSE market on open MOO BUY
+NYSE_MOO_SELL = "3b717b2a-509e-415a-ac43-3d8584d57db8"#	NYSE market on open MOO SELL
+NASD_MOO_BUY = "38448f6d-2fa5-421b-945e-ca0f1ec6f4c4"#	NASDAQ market on open MOO BUY
+NASD_MOO_SELL = "be6c7d04-0023-4874-adb2-f5aa9d5a67bd"#	NASDAQ market on open MOO SELL
+ARCA_MOO_BUY = "48c76891-2d0b-424e-91de-480d15718761"#	ARCA market on open MOO BUY
+ARCA_MOO_SELL = "b5729f26-67a8-4256-a9cc-9685a4614287"#	ARCA market on open MOO SELL
+NYSE_LOO_BUY = "67ec1474-5fbe-421f-a5a1-083e36302f6f"#	NYSE limit on open LOO BUY
+NYSE_LOO_SELL = "8b30e0f8-6fac-484f-8641-66716b54f701"#	NYSE limit on open LOO SELL
+NASD_LOO_BUY = "8a8b1b72-8224-4a57-8e49-618e0e80bd01"#	NASDAQ limit on open LOO BUY
+NASD_LOO_SELL = "a8f38ef2-85b4-461e-9ab7-49f9c84d59d2"#	NASDAQ limit on open LOO SELL
+ARCA_LOO_BUY = "f629b2e1-2896-4b50-931c-e068b19e413f"#	ARCA limit on open LOO BUY
+ARCA_LOO_SELL = "03d615b9-e74a-4831-a2b7-503c547662dd"#	ARCA limit on open LOO BUY
+NYSE_MOC_BUY = "45fdb0b4-06b7-4845-ad2b-c4a9610d522e"#	NYSE market on close MOC BUY
+NYSE_MOC_SELL = "3baa4e23-315a-4304-a852-bb476dfee9eb"#	NYSE market on close MOC SELL
+NASD_MOC_BUY = "e8d1c66b-e8c7-4756-b29f-080b55fc58bb"#	NASDAQ market on close MOC BUY
+NASD_MOC_SELL = "39f6e5fe-3782-4119-8c75-9b7e3558e5cb"#	NASDAQ market on close MOC SELL
+ARCA_MOC_BUY = "df58779e-22f2-47a1-afa5-ce5ed0fc095d"#	ARCA market on close MOC BUY
+ARCA_MOC_SELL = "28bfb89c-93f9-45b1-b414-f79aa16865c5"#	ARCA market on close MOC SELL
+NYSE_LOC_BUY = "a4f5de75-1f6c-4bb5-bea5-c649c4515a8e"#	NYSE limit on close LOC BUY
+NYSE_LOC_SELL = "8e15d90b-5842-4e6a-81ea-5d404400913c"#	NYSE limit on close LOC SELL
+NASD_LOC_BUY = "a3d068a6-f2ba-4270-b029-57eb455decae"#	NASDAQ limit on close LOC BUY
+NASD_LOC_BUY IO = "f7221ac9-7178-4e9e-baca-d68199c06c95"#	NASDAQ limit on close LOC BUY IO
+NASD_LOC_SELL = "e1302f13-3c4b-4d07-b43d-b7b32f29700a"#	NASDAQ limit on close LOC SELL
+NASD_LOC_SELL IO = "3120f982-e103-4175-8421-9966bf665c96"#	NASDAQ limit on close LOC SELL IO
+ARCA_LOC_BUY = "a03c2644-0cad-42d6-9922-44f1e534ee11"#	ARCA limit on close LOC BUY
+ARCA_LOC_SELL = "24c5a68c-dded-40b0-85a2-30482a333f35"#	ARCA limit on close LOC SELL
+Symbol List GUIDs	Lists of symbols that can be different on different trading days, most lists start 2013/09/25
+service.symbol_list.in_list(service.symbol_list.get_handle(guidOfList),symbol)	This returns a 1 if symbol is in list and a zero if it is not. See link above for more info.
+"072c1578-08c5-462a-a94e-325b2bf654b6"#	Dow 30
+"0ab4ba39-8b49-4c79-b062-998513608e91"#	MidCap
+"cc3ab113-f1e0-46a6-9a5a-ee3615f7600f"#	Russell 3000
+"5af64352-6bc4-47cf-a73d-09925dab62bb"#	S&P 100
+"552dd08d-061d-49c9-a562-343e61fc0893"#	S&P 400
+"9a802d98-a2d7-4326-af64-cea18f8b5d61"#	S&P 500
+"5d414bb9-0154-46f8-8a12-f80430c7cbca"#	S&P 600
+"448cbb9e-cfde-4a55-bb7b-7521080e5a0b"#	Earnings Today After
+"0774ba76-e53e-4293-9674-489e65c2581b"#	Earnings Today Before
+"37149d13-14a6-4892-8cbb-234edfa038a8"#	Earnings Today During
+"464e4997-ef15-4cb5-b047-b08962afd294"#	Earnings Today Undefined
+"e2163676-d1fb-4253-9cb8-0ec3b739d459"#	Earnings Tomorrow After
+"49ebe00b-a114-46c3-9c91-a80762bc948e"#	Earnings Tomorrow Before
+"1ef4e286-0261-46b3-bbb8-d07f8e55026b"#	Earnings Tomorrow During
+"d4a57084-60a6-4fd4-951e-55c02185cce3"#	Earnings Tomorrow Undefined
+"288d5e0a-9ab2-4e52-9e10-420eaf2adc2b"#	Earnings Yesterday After
+"5ece500b-7308-428b-ab6a-0255b1342f76"#	Earnings Yesterday Before
+"20961a18-223f-4548-9112-f7f40e0dff40"#	Earnings Yesterday During
+"9c914529-e398-437f-84d8-07f8d86349eb"#	Earnings Yesterday Undefined
+"3595C7D8-69C4-479D-85DD-F70BB634F8C5"	Earnings 2 Days From Now Before
+"6941F8B6-4F04-49BB-A733-AE7CFB967077"	Earnings 2 Days From Now During
+"11D99EF9-9426-4628-9043-B7F04B9C8885"	Earnings 2 Days From Now After
+"6561E46D-F8FA-4134-A1A3-3A884CBF684C"	Earnings 3 Days From Now Before
+"C63A0C55-9937-4913-9767-2C51BB31602E"	Earnings 3 Days From Now During
+"04CCFE59-6A0D-4718-81FB-AB19EC4A7E4B"	Earnings 3 Days From Now After
+"69F9548D-3829-4B27-AB13-8ADCAA92B2FD"	Earnings 4 Days From Now Before
+"902DB74B-5020-4957-9B1D-2DFAA7AF31DA"	Earnings 4 Days From Now During
+"F4E03603-A376-4F74-9ADB-C7D6F4A47E46"	Earnings 4 Days From Now After
+"B52E9E21-0101-45A7-8A08-C195E95D42BC"	Earnings 5 Days From Now Before
+"4D4E326E-AA1E-455C-B4D8-5A4F42FEE744"	Earnings 5 Days From Now During
+"08A7D5C5-9C46-40AF-B9E8-1A4B798C688E"	Earnings 5 Days From Now After
+"FB4050A2-FE73-442B-B608-088F0909213D"	Earnings 2 Days Ago Before
+"FB107A77-6B7C-4D19-B742-E056433099C6"	Earnings 2 Days Ago During
+"D40830DD-688A-4E9D-B243-D5BCB17F8FC4"	Earnings 2 Days Ago After
+"127ABB50-B9DD-436E-810C-33476858AC1E"	Earnings 3 Days Ago Before
+"12054BE7-00B2-42D2-B8C2-B182B607FEC9"	Earnings 3 Days Ago During
+"D088D753-D4D1-4E55-AABB-34F091698A09"	Earnings 3 Days Ago After
+"B4FEEF3D-F05C-49BF-877F-0F5C78A79980"	Earnings 4 Days Ago Before
+"33C97434-6D1C-4B96-9B23-ABA2D91E5746"	Earnings 4 Days Ago During
+"696C3809-7709-4500-9E68-E3D4310C7ED3"	Earnings 4 Days Ago After
+"2D2C2A3F-B9F1-4749-A861-00ADEDFA9FD2"	Earnings 5 Days Ago Before
+"9B469E31-696A-418D-BC79-20E5F4BCAB70"	Earnings 5 Days Ago During
+"856B6BB1-2920-495A-8879-DD74582D74B5"	Earnings 5 Days Ago After
+"47313c31-cadf-4474-b015-cd51bd8321ae"#	500K - 1M
+"c5673334-de39-4ad2-b517-82b591cdb928"#	Over 1M
+"5e0adb61-6315-44ef-9320-a767b5bee336"#	Under 500K
+"6b2fc6d0-3f87-41c3-a8e2-1507f43cb36e"#	ADRs - follow this link for more
+"5913eeee-45b5-44ad-9d5e-6c0aaf9950e8"#	Beta Negative
+"783c8bd4-0e62-4edf-96e7-286b14ac8669"#	Beta Neutral
+"0e788f9d-4c44-4724-8581-21ef7e5dad09"#	Beta Positive
+"ed87cac1-eefa-4b80-9208-8ebe24fdf902"#	AMEX Listed
+"834da53d-e31c-4693-b97a-4e27479cf0b0"#	ARCA Listed
+"18305bb4-9bf4-4032-835c-1c9e0dd203c3"#	NASDAQ
+"98d1556d-6593-48f7-b405-dc272e5b8296"#	NASDAQ Capital Market
+"702e4aef-aefa-4507-b610-97ae6f8b102b"#	NASDAQ Global Market
+"84d0f39d-81ff-4989-867e-d63c1d438afc"#	NYSE Listed
+"c3544f64-41f2-4744-bde6-dd742384c844"#	NYSE/AMEX combined
+"4c88e1c3-d007-481f-a410-092cf9a23743"#	8080
+"06f421d1-e704-48a7-9ef8-89505ffab962"#	CANSLIM
+"70b04c90-7fe6-4e7d-b3bc-747f16862fcf"#	Imbalance Close Buy
+"7472d8a9-d277-4be1-8a30-9913ce1b79e9"#	Imbalance Close Sell
+"cca18f91-c32a-4bcf-9bf8-c1cf30967cde"#	Imbalance Open Buy
+"7a8d9b16-5560-46bb-8a43-10fe24aaf0b6"#	Imbalance Open Sell
+Industry Lists	Follow the link for the guids
+"38bac7d0-3405-4cc9-a2df-926d5661429e"#	News 1 Hour, Primary Symbol
+"cd76bab7-5f8f-41f7-972b-7ef147e13a91"#	News 1 Hour, Secondary Symbols
+"f756a741-8de9-415b-83c3-408439272056"#	News 1 Hours, Related Symbols
+"5d7bf4a5-d016-480c-bd3c-c850470f139a"#	News 12 Hour, Secondary Symbols
+"9e7e633e-1005-4944-aa93-06efa58d73e0"#	News 12 Hours, Primary Symbol
+"91780408-532e-4731-aa91-1c721fe79be9"#	News 12 Hours, Related Symbols
+"067f84fb-c7f2-4570-a83f-b90ae0adb23e"#	News 15 Minutes, Primary Symbol
+"d74adb7b-0d77-4920-b471-48d9778199d7"#	News 15 Minutes, Related Symbols
+"cbffa48e-a627-459b-8dc0-8ced39f68af3"#	News 15 Minutes, Secondary Symbols
+"952d33b9-d2e8-4a49-be28-e2b42975bb03"#	News 24 Hour, Secondary Symbols
+"413bd802-b6e8-476f-8266-200b243f7243"#	News 24 Hours, Primary Symbol
+"6f7da851-5bc2-4b58-b7d8-5701da7efe14"#	News 24 Hours, Related Symbols
+"f376473b-61e8-46c2-bad9-5befb9e65f94"#	Closed Ended Fund
+"188c6aff-11ea-4a19-bbf8-172fa212643b"#	Closed Near High
+"942cb0bf-695b-40ed-8436-34237692efae"#	Closed Near Low
+"82e8721e-d9fe-4ac4-b597-5197a4309a60"#	ETFs
+"9389dd95-ca7e-4fe2-b2a6-329ce7de4665"#	ETNs
+"0ed13989-3429-4724-8baf-985dca9d1713"#	Easy To Borrow
+"858520b0-8c73-4098-a605-85ce8ff1acea"#	IPOs Last 5 Days
+"c7ce3f4c-cad3-4c55-816c-2f0c156953f6"#	IPOs Today
+"2e49100c-0835-47f2-972b-cf7237956a07"#	Master Limited Partnership
+"2726f8f5-6528-4053-ad20-055097ee1ad6"#	Preferred
+"e1d82910-d575-455b-954b-6e0631195358"#	Recent IPOs
+"01d32ce7-7e62-4a57-b2fa-a6da1ac0d915"#	Recent Reverse Splits
+"936eebb3-3374-448b-9332-41176eb91e40"#	Series
+"ff169722-bfef-4f47-bc4d-6c09db5b72d1"#	Splits Today
+"170ddf0e-e43b-4836-ae86-26ea5d363439"#	Warrants
+"52f15b46-bb36-444d-b0bd-23168528c6e1"#	When Distributed
+"1cb70701-7ca9-491a-a9df-96f1380e199a"#	When Issued
+"8d57e928-1a4f-4c03-bae5-574ec8907d72"#	Sector Basic Material
+"5ecad242-a19b-47d7-8637-3d1e3b4f0440"#	Sector Capital Equipment
+"5d61afc6-bfc4-41ae-bbad-53167a1cecc8"#	Sector Consumer Cyclical
+"027e7005-8081-4d8d-b291-820ee12863c1"#	Sector Consumer Staple
+"eb00e6d2-e037-4f87-8f55-a1a439b267b0"#	Sector Energy
+"1030bd52-50c3-4669-ae30-0a034e8408a7"#	Sector Financial
+"e2cf6180-1932-4d6e-8dd4-8e0d744aa1b3"#	Sector Health Care
+"a24710bd-14eb-4a87-aa0d-bd1fa4fff72f"#	Sector Retail
+"d18366ec-fa56-4517-8e47-3ada4475d0dd"#	Sector Technology
+"e8434d5d-aab4-4d2c-91d5-06f2de0dcfad"#	Sector Transportation
+"27d09a87-460b-40e8-8c3e-19c9c6143823"#	Sector Utility
+Imbalances	Imbalance Data NYSE AMEX NASDAQ
+md.amer_imb.abs_price_diff_bid_ask #	Price Diff abs Bid-Ask
+md.amer_imb.abs_price_diff_from_pc #	Price Delta PC
+md.amer_imb.abs_price_diff_from_pc_percent_atr #	Diff Match Price PC of ATR
+md.amer_imb.clearing_price #	Continuous Clear Price
+md.amer_imb.closing_only_clearing_price #	Close Clear Price
+md.amer_imb.exchange #	Exchange
+md.amer_imb.flip_count #	Flip Count (includes flips passing via a zero as of update 2020/1/12)
+md.amer_imb.high_imbalance #	Imbalance Shares High
+md.amer_imb.high_imbalance_time #	Imbalance Shares High Time
+md.amer_imb.imbalance_quantity #	Imbalance Shares
+md.amer_imb.is_regulatory #	Is Regulatory
+md.amer_imb.last_flip_time #	Flip Time (Last)
+md.amer_imb.paired_quantity #	Paired Quantity
+md.amer_imb.price_diff_bid_ask #	Price Diff Bid-Ask
+md.amer_imb.price_diff_from_last #	Price Diff from Last
+md.amer_imb.price_percent_diff_last #	Percent of Price
+md.amer_imb.price_percent_pc #	Price Diff Percent PC
+md.amer_imb.reference_price #	Reference Price
+md.amer_imb.regulatory_quantity #	Regulatory Imbalance Shares
+md.amer_imb.shares_percent_primary_vol #	Percent of NYSE Volume
+md.amer_imb.shares_percent_vol #	Percent of Volume
+md.amer_imb.SSR_filling_price #	SSR Filling Price
+md.amer_imb.timestamp #	Time
+md.amer_imb.type #	Nyse Imbalance Type
+md.arca_imb.abs_price_diff_from_pc #	Price Delta PC
+md.arca_imb.abs_price_diff_from_pc_percent_atr #	Diff Match Price PC of ATR
+md.arca_imb.exchange #	Exchange
+md.arca_imb.flip_count #	Flip Count (includes flips passing via a zero as of update 2020/1/12)
+md.arca_imb.high_imbalance #	Imbalance Shares High
+md.arca_imb.high_imbalance_time #	Imbalance Shares High Time
+md.arca_imb.indicative_match_price #	indicative_match_price
+md.arca_imb.indicative_match_volume #	indicative_match_volume
+md.arca_imb.last_flip_time #	Flip Time (Last)
+md.arca_imb.market_imbalance #	Market Imbalance
+md.arca_imb.timestamp #	Time
+md.arca_imb.total_imbalance #	Total Imbalance
+md.arca_imb.type #	Auction Type
+md.nyse_imb.abs_price_diff_bid_ask #	Price Diff abs Bid-Ask
+md.nyse_imb.abs_price_diff_from_pc #	Price Delta PC
+md.nyse_imb.abs_price_diff_from_pc_percent_atr #	Diff Match Price PC of ATR
+md.nyse_imb.clearing_price #	Continuous Clear Price
+md.nyse_imb.closing_only_clearing_price #	Close Clear Price
+md.nyse_imb.exchange #	Exchange
+md.nyse_imb.flip_count #	Flip Count
+md.nyse_imb.high_imbalance #	Imbalance Shares High
+md.nyse_imb.high_imbalance_time #	Imbalance Shares High Time
+md.nyse_imb.imbalance_quantity #	Imbalance Shares
+md.nyse_imb.is_regulatory #	Is Regulatory
+md.nyse_imb.last_flip_time #	Flip Time (Last)
+md.nyse_imb.paired_quantity #	Paired Quantity
+md.nyse_imb.price_diff_bid_ask #	Price Diff Bid-Ask
+md.nyse_imb.price_diff_from_last #	Price Diff from Last
+md.nyse_imb.price_percent_diff_last #	Percent of Price
+md.nyse_imb.price_percent_pc #	Price Diff Percent PC
+md.nyse_imb.reference_price #	Reference Price
+md.nyse_imb.regulatory_quantity #	Regulatory Imbalance Shares
+md.nyse_imb.shares_percent_primary_vol #	Percent of NYSE Volume
+md.nyse_imb.shares_percent_vol #	Percent of Volume
+md.nyse_imb.SSR_filling_price #	SSR Filling Price
+md.nyse_imb.timestamp #	Time
+md.nyse_imb.type #	Nyse Imbalance Type
+md.nasdaq_imb.abs_price_diff_from_far #	Far Price Diff abs
+md.nasdaq_imb.abs_price_diff_from_far_percent_atr #	Far Price Diff Percent Atr
+md.nasdaq_imb.abs_price_diff_from_near #	Near Price Diff abs
+md.nasdaq_imb.abs_price_diff_from_near_percent_atr #	Near Price Diff Percent Atr
+md.nasdaq_imb.abs_price_diff_from_pc #	Price Delta PC
+md.nasdaq_imb.abs_price_diff_from_pc_percent_of_atr #	Diff Match Price PC of ATR
+md.nasdaq_imb.exchange #	Exchange
+md.nasdaq_imb.far_price #	Far Price
+md.nasdaq_imb.flip_count #	Flip Count (includes flips passing via a zero as of update 2020/1/12)
+md.nasdaq_imb.high_imbalance #	Imbalance Shares High
+md.nasdaq_imb.high_imbalance_time #	Imbalance Shares High Time
+md.nasdaq_imb.imbalance_quantity #	Imbalance Shares
+md.nasdaq_imb.last_flip_time #	Flip Time (Last)
+md.nasdaq_imb.near_price #	Near Price
+md.nasdaq_imb.paired_quantity #	Paired Shares
+md.nasdaq_imb.price_diff_from_far #	Far Price Diff
+md.nasdaq_imb.price_diff_from_near #	Near Price Diff
+md.nasdaq_imb.price_variation_indicator #	Price Variation Indicator
+md.nasdaq_imb.reference_price #	Current Reference Price
+md.nasdaq_imb.timestamp #	Time
+md.nasdaq_imb.type #	Cross Type
+md.market_close_time #	Market Close Time
+md.market_open_time #	Market Open Time
