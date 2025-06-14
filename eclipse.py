@@ -148,8 +148,9 @@ class Gr8Script25ac3723c613429e98a56039fe1a3227(Strategy):
                 and (prev_close - ask) / ask >= .025
                 and s_open - ask >= .2
                 and ask/md.bar.daily(-5).close[0] - 1 < 3
-                and (m_open - ask)/ask > .01           
+                and (m_open - ask)/ask > .01
                 and 3 < ask <= 100
+                and md.L1.rvol > 1.0
                 and md['SPY'].L1.gap < -.54):
 
                 points = 0
